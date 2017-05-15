@@ -3,10 +3,6 @@ import mysql.connector
 
 """
 TODO
-пустая строка в конце файла
-генератор
-пустой varCounts
-меня \ меня
 """
 
 abc = "абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ"
@@ -36,8 +32,8 @@ masks = [
     ({"mask": ['cCc', 'cC'],  "place": 0, "step": 3}, "амфибрахий"),
     ({"mask": ['cCc', 'cCc'], "place": 0, "step": 3}, "амфибрахий"),
 
-    ({"mask": ['cCc', 'cC'], "place": 2, "step": 3}, "анапест"),
-    ({"mask": ['Cc', 'cCc'], "place": 2, "step": 3}, "анапест"),
+    ({"mask": ['cCc', 'cC'], "place": 1, "step": 3}, "анапест"),
+    ({"mask": ['Cc', 'cCc'], "place": 1, "step": 3}, "анапест"),
 ]
 perfectMasks = {
     "ямб": "cC",
@@ -136,7 +132,9 @@ def get_r1_ifConst(paramLine):
     r = get_r(paramLine)[1: -1]
     if not all([r[i] == r[0] for i in range(len(r))]):
         return None # in case of non const r[i]
-    return r[1]
+    if len(r) == 0:
+        return None
+    return r[0]
 
 def isPropertyConst(paramVarLines, propertyGetter):
     """
@@ -206,13 +204,16 @@ def selectMetricCondition(varAccLines):
             return 1, selectedParams
 
 def genVarSets(varCounts):
-    if len(varCounts) == 0:
-        return []
-
-    if len(varCounts) == 1:
-        return [[i] for i in range(varCounts[0])]
-    else:
-        return product(genVarSets([varCounts[0]]), genVarSets(varCounts[1:]))
+    varSet = [0 for i in range(len(varCounts))]
+    while True:
+        yield varSet
+        varSet[0] += 1
+        for i, val in enumerate(varSet):
+            if val == varCounts[i]:
+                if i == len(varSet) - 1:
+                    return
+                varSet[i] = 0
+                varSet[i + 1] += 1
 
 def processFirstCond(varAccLines):
     varCounts = [len(line) for line in varAccLines]
@@ -239,7 +240,6 @@ def processSecondCond(varAccLines, selParams):
     condMatched = {0}
     geqThen4 = False
     geqThen3 = False
-    geqThen2 = False
     geqThen1 = False
     lssThen1 = False
     for paramVarLine in varAccLines:
@@ -253,8 +253,6 @@ def processSecondCond(varAccLines, selParams):
                     geqThen4 = True
                 if r[i] >= 3:
                     geqThen3 = True
-                if r[i] >= 2:
-                    geqThen2 = True
                 if r[i] >= 1:
                     geqThen1 = True
                 else:
@@ -321,14 +319,10 @@ def processFourthCond(varAccLines, selParams):
                     return 14
             return 0
 
-def findAll(str, subStr):
-    start = 0
-    while True:
-        start = str.find(subStr, start)
-        if start == -1:
-            return
-        yield start
-        start += len(subStr)
+def findAll(lst, subLst):
+    for i in range(len(lst)):
+        if lst[i] == subLst[0] and lst[i:i+len(subLst)] == subLst:
+            yield i
 
 def getMetricbyMask(mask):
     for key, val in masks:
@@ -340,20 +334,16 @@ def genLineMask(maskPattern, length):
     return (maskPattern * count)[:length]
 
 def processFifthCond(varAccLines, selParams):
-    monoAccLines = getMonoAccentedLines(varAccLines)
-
     matchedMasks = []
     for mask, metric in masks:
-        maskCode = "|".join([""] + mask["mask"] + [""])
-        for paramLine in monoAccLines:
-            wordCodes = paramLine[0]["word_codes"]
-            lineCode = "|".join([""] + wordCodes + [""])
-            ocurances = []
-            for ocur in findAll(lineCode, maskCode):
-                if (ocur - mask["place"]) % mask["step"] == 0:
-                    ocurances.append(ocur)
-            if len(ocurances) > 0:
-                matchedMasks.append(mask)
+        for varLine in varAccLines:
+            for paramLine in varLine:
+                wordCodes = paramLine["word_codes"]
+                for ocur in findAll(wordCodes, mask["mask"]):
+                    inStrOcur = sum([len(c) for c in wordCodes[0:ocur]])
+                    if (inStrOcur - mask["place"]) % mask["step"] == 0:
+                        matchedMasks.append(mask)
+                        break
 
     maskErrors = []
     for mask in matchedMasks:
@@ -387,10 +377,14 @@ def processFifthCond(varAccLines, selParams):
             bestMask = mask
             minError = error
 
-    perfectMask = perfectMasks[getMetricbyMask(bestMask)]
+    metric = getMetricbyMask(bestMask)
+    if metric is None:
+        return "unknown", -1
+
+    perfectMask = perfectMasks[metric]
     lineMask = genLineMask(perfectMask, selParams["Rrk"])
     footStep = lineMask.count("C")
-    return getMetricbyMask(bestMask), footStep
+    return metric, footStep
 
 
 def main(fileName):
@@ -476,7 +470,7 @@ def splitToWords(line):
     return cleanWords
 
 def readPoem(file):
-    rawLines = [line[:-1] for line in file.readlines()]
+    rawLines = file.readlines()
 
     poem = []
     for line in rawLines:
