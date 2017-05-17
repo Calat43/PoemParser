@@ -48,49 +48,49 @@ def getNumVector(ccLine):
 
 def checkFirstCond(line):
     for id, symbCode in enumerate(line):
-        if id % 2 != 0:
-            if symbCode != 1 or symbCode != 2:
+        if (id + 1) % 2 != 0:
+            if symbCode != 1 and symbCode != 2:
                 return False
     return True
 
 
 def checkSecondCond(line):
     for id, symbCode in enumerate(line):
-        if id % 2 == 0:
-            if symbCode != 1 or symbCode != 2:
+        if (id + 1) % 2 == 0:
+            if symbCode != 1 and symbCode != 2:
                 return False
     return True
 
 
 def checkThirdCond(line):
     for id, symbCode in enumerate(line):
-        if (id  - 2) % 3 == 0:
-            if symbCode != 1 or symbCode != 2 or symbCode != 3:
+        if ((id + 1) - 2) % 3 == 0:
+            if symbCode != 1 and symbCode != 2 and symbCode != 3:
                 return False
-            if id % 3 == 0:
-                if symbCode != 1 or symbCode != 2 or symbCode != 4:
+            if (id + 1) % 3 == 0:
+                if symbCode != 1 and symbCode != 2 and symbCode != 4:
                     return False
     return True
 
 
 def checkFourthCond(line):
     for id, symbCode in enumerate(line):
-        if (id  - 1) % 3 == 0:
-            if symbCode != 1 or symbCode != 2 or symbCode != 4:
+        if ((id + 1) - 1) % 3 == 0:
+            if symbCode != 1 and symbCode != 2 and symbCode != 4:
                 return False
-            if id % 3 == 0:
-                if symbCode != 1 or symbCode != 2 or symbCode != 3:
+            if (id + 1) % 3 == 0:
+                if symbCode != 1 and symbCode != 2 and symbCode != 3:
                     return False
     return True
 
 
 def checkFifthCond(line):
     for id, symbCode in enumerate(line):
-        if (id  - 1) % 3 == 0:
-            if symbCode != 1 or symbCode != 2 or symbCode != 3:
+        if ((id + 1) - 1) % 3 == 0:
+            if symbCode != 1 and symbCode != 2 and symbCode != 3:
                 return False
-            if (id - 2) % 3 == 0:
-                if symbCode != 1 or symbCode != 2 or symbCode != 4:
+            if ((id + 1) - 2) % 3 == 0:
+                if symbCode != 1 and symbCode != 2 and symbCode != 4:
                     return False
     return True
 
@@ -160,6 +160,7 @@ def main(fileName):
         poemNumVectors.append(varVect)
 
     metricMatchCounts = analyse(poemNumVectors)
+    print(metricMatchCounts)
     metric = max(metricMatchCounts.items(), key = operator.itemgetter(1))[0]
 
     footMatchCounts = countFoot(poemNumVectors, metric)
