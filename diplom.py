@@ -33,7 +33,7 @@ masks = [
     ({"mask": ['cCc', 'cCc'], "place": 0, "step": 3}, "амфибрахий"),
 
     ({"mask": ['cCc', 'cC'], "place": 1, "step": 3}, "анапест"),
-    ({"mask": ['Cc', 'cCc'], "place": 1, "step": 3}, "анапест"),
+    ({"mask": ['Cc', 'cCc'], "place": 2, "step": 3}, "анапест"),
 ]
 perfectMasks = {
     "ямб": "cC",
@@ -64,8 +64,7 @@ def getLineAccentCodes(line):
         lineCode = []
         assert(len(accentSeq) == len(line))
 
-        for wordId in range(len(line)):
-            word = line[wordId]
+        for wordId, word in enumerate(line):
 
             accentId = accentSeq[wordId]
             syllCount = getSyllablesCount(word)
@@ -179,11 +178,12 @@ def selectMetricCondition(varAccLines):
 
     selectedParams = {"Rrk": mono_Rrk or var_Rrk, "k": mono_k or var_k, "r1": None}
 
-    if mono_RrkConst and var_Rrk:
+    if mono_RrkConst and var_RrkConst:
         if mono_kConst and var_kConst:
             mono_rConst, mono_r = isPropertyConst(monoAccLines, get_r1_ifConst)
             var_rConst,  var_r  = isPropertyConst(varAccLines, get_r1_ifConst)
-            if mono_rConst or var_rConst:
+
+            if mono_rConst and var_rConst:
                 selectedParams["r1"] = mono_r or var_r
                 return 4, selectedParams
             else:
@@ -195,7 +195,7 @@ def selectMetricCondition(varAccLines):
         if mono_kConst and var_kConst:
             mono_rConst, mono_r = isPropertyConst(monoAccLines, get_r1_ifConst)
             var_rConst,  var_r  = isPropertyConst(varAccLines, get_r1_ifConst)
-            if mono_rConst or var_rConst:
+            if mono_rConst and var_rConst:
                 selectedParams["r1"] = mono_r or var_r
                 return 3, selectedParams
             else:
@@ -203,10 +203,16 @@ def selectMetricCondition(varAccLines):
         else:
             return 1, selectedParams
 
+
 def genVarSets(varCounts):
+    """
+    Generates all possible sequences of line variations for poem
+    :return: list lists of (variation numbers for each line)
+    """
     varSet = [0 for i in range(len(varCounts))]
     while True:
         yield varSet
+
         varSet[0] += 1
         for i, val in enumerate(varSet):
             if val == varCounts[i]:
@@ -214,6 +220,7 @@ def genVarSets(varCounts):
                     return
                 varSet[i] = 0
                 varSet[i + 1] += 1
+
 
 def processFirstCond(varAccLines):
     varCounts = [len(line) for line in varAccLines]
