@@ -1,40 +1,41 @@
 import math
 import mysql.connector
 
-"""
-TODO
-"""
-
 abc = "абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ"
+
 vowels = "аеёиоуыэюяАЕЁИОУЫЭЮЯ"
-particles = {"де" : "*",
-             "ка" : "*",
-             "кое" : "**",
-             "кой" : "*",
-             "кась" : "*",
-             "либо" : "**",
-             "нибудь" : "**",
-             "с" : "",
-             "тка" : "*",
-             "тко" : "*",
-             "то" : "*",}
+
+particles = {"де": "*",
+             "ка": "*",
+             "кое": "**",
+             "кой": "*",
+             "кась": "*",
+             "либо": "**",
+             "нибудь": "**",
+             "с": "",
+             "тка": "*",
+             "тко": "*",
+             "то": "*", }
+
 masks = [
-    ({"mask": ['cC', 'cC'],  "place": 0, "step": 2}, "ямб"),
+    ({"mask": ['cC', 'cC'], "place": 0, "step": 2}, "ямб"),
     ({"mask": ['cC', 'cCc'], "place": 0, "step": 2}, "ямб"),
     ({"mask": ['cCc', 'Cc'], "place": 0, "step": 2}, "ямб"),
 
     ({"mask": ['Cc', 'Cc'], "place": 0, "step": 2}, "хорей"),
+    ({"mask": ['cC', 'cC'], "place": 1, "step": 2}, "хорей"),
 
-    ({"mask": ['Cc', 'cC'],   "place": 0, "step": 3}, "дактиль"),
-    ({"mask": ['Cc', 'cCc'],  "place": 0, "step": 3}, "дактиль"),
+    ({"mask": ['Cc', 'cC'], "place": 0, "step": 3}, "дактиль"),
+    ({"mask": ['Cc', 'cCc'], "place": 0, "step": 3}, "дактиль"),
     ({"mask": ['Cc', 'cCcc'], "place": 0, "step": 3}, "дактиль"),
 
-    ({"mask": ['cCc', 'cC'],  "place": 0, "step": 3}, "амфибрахий"),
+    ({"mask": ['cCc', 'cC'], "place": 0, "step": 3}, "амфибрахий"),
     ({"mask": ['cCc', 'cCc'], "place": 0, "step": 3}, "амфибрахий"),
 
     ({"mask": ['cCc', 'cC'], "place": 1, "step": 3}, "анапест"),
     ({"mask": ['Cc', 'cCc'], "place": 2, "step": 3}, "анапест"),
 ]
+
 perfectMasks = {
     "ямб": "cC",
     "хорей": "Cc",
@@ -42,15 +43,135 @@ perfectMasks = {
     "амфибрахий": "cCc",
     "анапест": "ccC",
 }
-conn = mysql.connector.connect(host='localhost', database='accents', user='root', password='1234')
+
+resultCodes = {
+    1: {
+        1: "неравностопный метрический стих",
+        2: "неравностопный метрический стих",
+        3: "неравностопный метрический стих",
+        0: "дисметрический стих",
+    },
+    2: {
+        1: "неурегулированный {k}-акцентный тонический стих",
+        2: "4-сложный {k}-акцентный тактовик",
+        3: "3-сложный {k}-акцентный тактовик",
+        4: "3-сложный {k}-акцентный дольник",
+        5: "2-сложный {k}-акцентный дольник",
+    },
+    3: {
+        0: "неурегулированный {K}-стопный силлабо-тониеский стих"
+    },
+    4: {
+        1: "{k}-стопный хорей",
+        2: "{k}-стопный ямб",
+        3: "{k}-стопный дактиль",
+        4: "{k}-стопный амфибрахий",
+        5: "{k}-стопный анапест",
+        6: "{k}-стопный пэон-1",
+        7: "{k}-стопный пэон-2",
+        8: "{k}-стопный пэон-3",
+        9: "{k}-стопный пэон-4",
+        10: "{k}-стопный пэнтон-1",
+        11: "{k}-стопный пэнтон-2",
+        12: "{k}-стопный пэнтон-3",
+        13: "{k}-стопный пэнтон-4",
+        14: "{k}-стопный пэнтон-5",
+        0: "многосложный размер",
+    },
+}
 
 
-def getSyllablesCount(word):
-    count = 0
-    for latter in word:
-        if latter in vowels:
-            count += 1
-    return count
+def main(fileName):
+    with open(fileName, 'r') as poemFile:
+        poem = readPoem(poemFile)
+
+    poemAccentCodes = []
+    for line in poem:
+        poemAccentCodes.append(getLineAccentCodes(line))
+
+    varParamizedPoem = getPoemParametrised(poemAccentCodes)
+
+    condNumber, selParams = selectMetricCondition(varParamizedPoem)
+
+    subCondNumber = 0
+    metric = None
+    foot = None
+    if condNumber == 1:
+        subCondNumber = processFirstCond(varParamizedPoem)
+    elif condNumber == 2:
+        subCondNumber = processSecondCond(varParamizedPoem, selParams)
+    elif condNumber == 4:
+        subCondNumber = processFourthCond(varParamizedPoem, selParams)
+    elif condNumber == 5:
+        metric, foot = processFifthCond(varParamizedPoem, selParams)
+
+    print("")
+    if condNumber == 5:
+        print("{}-стопный {}".format(foot, metric))
+    else:
+        print(resultCodes[condNumber][subCondNumber].format(k = selParams["k"]))
+
+
+def readPoem(file):
+    rawLines = file.readlines()
+
+    poem = []
+    for line in rawLines:
+        line = clearSpeciallChars(line)
+        lineWords = splitToWords(line)
+        if len(lineWords) > 0:
+            poem.append(lineWords)
+
+    return poem
+
+
+def clearSpeciallChars(line):
+    clearLine = ""
+    for i in range(0, len(line)):
+        char = line[i]
+        if char in abc or char == " ":
+            clearLine += char
+        elif char == "-":
+            if (i > 0 and line[i - 1] != " ") and (i < len(line) - 1 and line[i + 1] != " "):
+                clearLine += char
+
+    return clearLine
+
+
+def splitToWords(line):
+    words = line.split(" ")
+
+    while "" in words:
+        words.remove("")
+
+    cleanWords = []
+    for word in words:
+        if not any([(latter in vowels) for latter in word]):
+            # no vowels in word, skip it
+            continue
+
+        if "-" in word:
+            parts = word.split("-")
+            assert (len(parts) == 2)
+
+            hasParticle = False
+            if parts[0] in particles:
+                hasParticle = True
+                parts[0] = particles[parts[0]]
+
+            if parts[1] in particles:
+                hasParticle = True
+                parts[1] = particles[parts[1]]
+
+            if hasParticle:
+                cleanWords.append("".join(parts))
+            else:
+                cleanWords.append(parts[0])
+                cleanWords.append(parts[1])
+        else:
+            cleanWords.append(word)
+
+    return cleanWords
 
 
 def getLineAccentCodes(line):
@@ -62,7 +183,7 @@ def getLineAccentCodes(line):
     accentSequences = getAccentSeqeunces(line)
     for accentSeq in accentSequences:
         lineCode = []
-        assert(len(accentSeq) == len(line))
+        assert (len(accentSeq) == len(line))
 
         for wordId, word in enumerate(line):
 
@@ -90,6 +211,58 @@ def getLineAccentCodes(line):
     return allLineCodes
 
 
+def getAccentSeqeunces(line):
+    """
+    Generates all possible sequences of accentuation for given line
+    :return: list of sequences (as lists of accents)
+    """
+    if len(line) == 1:
+        return [[i] for i in getAccents(line[0])]
+    else:
+        return product(getAccentSeqeunces([line[0]]), getAccentSeqeunces(line[1:]))
+
+
+def getAccents(word):
+    """
+    Queries accents for given word from DB
+    "*" chars are ignored
+    :return: set of numbers each denotes stressed syllable 0-based number from last to first
+    """
+    word = word.replace("*", "")
+
+    global conn
+    cursor = conn.cursor()
+    cursor.execute('SELECT accent FROM accent_aot WHERE word_form="' + word + '"')
+    rows = cursor.fetchall()
+    uniq = set([row[0] for row in rows])
+    if len(uniq) == 0 or 255 in uniq:
+        print("[ERROR] Word \"{}\" is not in accents DB (or has no accent)".format(word))
+        return set(range(getSyllablesCount(word)))
+    return uniq
+
+
+def product(heads, tails):
+    """
+    Descartes product of two lists
+    :param heads: list of single-element lists
+    :param tails: list of lists
+    :return: list of products [heads[i] + tails[j] forall i,j]
+    """
+    products = []
+    for head in heads:
+        for tail in tails:
+            products.append(head + tail)
+    return products
+
+
+def getSyllablesCount(word):
+    count = 0
+    for latter in word:
+        if latter in vowels:
+            count += 1
+    return count
+
+
 def getPoemParametrised(poemAccentCodes):
     """
     Translates poem line codes list into list of dictionaries
@@ -110,30 +283,45 @@ def getPoemParametrised(poemAccentCodes):
                     k += 1
                     r.append(0)
                 else:
-                    assert(False)
+                    assert (False)
             lineParamsVariations.append({"word_codes": lineCode, "k": k, "r": r, "R": R})
         parametrised.append(lineParamsVariations)
     return parametrised
 
-def get_R_minus_rk(paramLine):
-    R = paramLine["R"]
-    r = paramLine["r"]
-    k = paramLine["k"]
-    return R - r[k]
 
-def get_k(paramLine):
-    return paramLine["k"]
+def selectMetricCondition(varAccLines):
+    """
+    Selects which metric condition is correct for this poem
+    :return: condition number from 0 to 5 and parameters values wich stays const to satisfy this condition
+    """
 
-def get_r(paramLine):
-    return paramLine["r"]
+    RrkIsConst, RrkVal = isPropertyConst(varAccLines, get_R_minus_rk)
+    kIsConst, kVal = isPropertyConst(varAccLines, get_k)
 
-def get_r1_ifConst(paramLine):
-    r = get_r(paramLine)[1: -1]
-    if not all([r[i] == r[0] for i in range(len(r))]):
-        return None # in case of non const r[i]
-    if len(r) == 0:
-        return None
-    return r[0]
+    selectedParams = {"Rrk": RrkVal, "k": kVal, "r1": None}
+
+    if RrkIsConst:
+        if kIsConst:
+            r1IsConst, r1Val = isPropertyConst(varAccLines, get_r1_ifConst)
+
+            if r1IsConst:
+                selectedParams["r1"] = r1Val
+                return 4, selectedParams
+            else:
+                return 0, None
+        else:
+            return 5, selectedParams
+    else:
+        if kIsConst:
+            r1IsConst, r1Val = isPropertyConst(varAccLines, get_r1_ifConst)
+            if r1IsConst:
+                selectedParams["r1"] = r1Val
+                return 3, selectedParams
+            else:
+                return 2, selectedParams
+        else:
+            return 1, selectedParams
+
 
 def isPropertyConst(paramVarLines, propertyGetter):
     """
@@ -156,53 +344,6 @@ def isPropertyConst(paramVarLines, propertyGetter):
             return True, propertyVal
     return False, None
 
-def getMonoAccentedLines(poem):
-    monoAccLines = []
-    for line in poem:
-        if len(line) == 1:
-            monoAccLines.append(line)
-    return monoAccLines
-
-
-def selectMetricCondition(varAccLines):
-    """
-    Selects which metric condition is correct for this poem
-    :return: condition number from 1 to 5
-    """
-    monoAccLines = getMonoAccentedLines(varAccLines)
-
-    mono_RrkConst, mono_Rrk = isPropertyConst(monoAccLines, get_R_minus_rk)
-    var_RrkConst,  var_Rrk  = isPropertyConst(varAccLines,  get_R_minus_rk)
-    mono_kConst,   mono_k   = isPropertyConst(monoAccLines, get_k)
-    var_kConst,    var_k    = isPropertyConst(varAccLines,  get_k)
-
-    selectedParams = {"Rrk": mono_Rrk or var_Rrk, "k": mono_k or var_k, "r1": None}
-
-    if mono_RrkConst and var_RrkConst:
-        if mono_kConst and var_kConst:
-            mono_rConst, mono_r = isPropertyConst(monoAccLines, get_r1_ifConst)
-            var_rConst,  var_r  = isPropertyConst(varAccLines, get_r1_ifConst)
-
-            if mono_rConst and var_rConst:
-                selectedParams["r1"] = mono_r or var_r
-                return 4, selectedParams
-            else:
-                # something went wrong
-                assert(False)
-        else:
-            return 5, selectedParams
-    else:
-        if mono_kConst and var_kConst:
-            mono_rConst, mono_r = isPropertyConst(monoAccLines, get_r1_ifConst)
-            var_rConst,  var_r  = isPropertyConst(varAccLines, get_r1_ifConst)
-            if mono_rConst and var_rConst:
-                selectedParams["r1"] = mono_r or var_r
-                return 3, selectedParams
-            else:
-                return 2, selectedParams
-        else:
-            return 1, selectedParams
-
 
 def genVarSets(varCounts):
     """
@@ -220,6 +361,30 @@ def genVarSets(varCounts):
                     return
                 varSet[i] = 0
                 varSet[i + 1] += 1
+
+
+def get_R_minus_rk(paramLine):
+    R = paramLine["R"]
+    r = paramLine["r"]
+    k = paramLine["k"]
+    return R - r[k]
+
+
+def get_k(paramLine):
+    return paramLine["k"]
+
+
+def get_r(paramLine):
+    return paramLine["r"]
+
+
+def get_r1_ifConst(paramLine):
+    r = get_r(paramLine)[1: -1]
+    if not all([r[i] == r[0] for i in range(len(r))]):
+        return None  # in case of non const r[i]
+    if len(r) == 0:
+        return None
+    return r[0]
 
 
 def processFirstCond(varAccLines):
@@ -326,19 +491,6 @@ def processFourthCond(varAccLines, selParams):
                     return 14
             return 0
 
-def findAll(lst, subLst):
-    for i in range(len(lst)):
-        if lst[i] == subLst[0] and lst[i:i+len(subLst)] == subLst:
-            yield i
-
-def getMetricbyMask(mask):
-    for key, val in masks:
-        if key == mask:
-            return val
-
-def genLineMask(maskPattern, length):
-    count = math.ceil(length / len(maskPattern))
-    return (maskPattern * count)[:length]
 
 def processFifthCond(varAccLines, selParams):
     matchedMasks = []
@@ -394,140 +546,22 @@ def processFifthCond(varAccLines, selParams):
     return metric, footStep
 
 
-def main(fileName):
-    with open(fileName, 'r') as poemFile:
-        poem = readPoem(poemFile)
-        print(poem)
-
-    poemAccentCodes = []
-    for line in poem:
-        poemAccentCodes.append(getLineAccentCodes(line))
-
-    #for line in poemAccentCodes:
-    #    print(line)
-
-    varParamizedPoem = getPoemParametrised(poemAccentCodes)
-
-    for lineParams in varParamizedPoem:
-        print(lineParams)
-
-    condNumber, selParams = selectMetricCondition(varParamizedPoem)
-
-    print("condNumber {}".format(condNumber))
-
-    subCond = 0
-    if condNumber == 1:
-        subCond = processFirstCond(varParamizedPoem)
-    elif condNumber == 2:
-        subCond = processSecondCond(varParamizedPoem, selParams)
-    elif condNumber == 4:
-        subCond = processFourthCond(varParamizedPoem, selParams)
-    elif condNumber == 5:
-        subCond, footStep = processFifthCond(varParamizedPoem, selParams)
-        print(footStep)
-
-    print("subCond {}".format(subCond))
-
-def clearSpeciallChars(line):
-    clearLine = ""
-    for i in range(0, len(line)):
-        char = line[i]
-        if char in abc or char == " ":
-            clearLine += char
-        elif char == "-":
-            if (i > 0 and line[i-1] != " ") and (i < len(line) - 1 and line[i+1] != " "):
-                clearLine += char
-
-    return clearLine
+def findAll(lst, subLst):
+    for i in range(len(lst)):
+        if lst[i] == subLst[0] and lst[i:i + len(subLst)] == subLst:
+            yield i
 
 
-def splitToWords(line):
-    words = line.split(" ")
-
-    while "" in words:
-        words.remove("")
-
-    cleanWords = []
-    for word in words:
-        if not any([(latter in vowels) for latter in word]):
-            # no vowels in word, skip it
-            continue
-
-        if "-" in word:
-            parts = word.split("-")
-            assert (len(parts) == 2)
-
-            hasParticle = False
-            if parts[0] in particles:
-                hasParticle = True
-                parts[0] = particles[parts[0]]
-
-            if parts[1] in particles:
-                hasParticle = True
-                parts[1] = particles[parts[1]]
-
-            if hasParticle:
-                cleanWords.append("".join(parts))
-            else:
-                cleanWords.append(parts[0])
-                cleanWords.append(parts[1])
-        else:
-            cleanWords.append(word)
-
-    return cleanWords
-
-def readPoem(file):
-    rawLines = file.readlines()
-
-    poem = []
-    for line in rawLines:
-        line = clearSpeciallChars(line)
-        lineWords = splitToWords(line)
-        if len(lineWords) > 0:
-            poem.append(splitToWords(line))
-
-    return poem
+def getMetricbyMask(mask):
+    for key, val in masks:
+        if key == mask:
+            return val
 
 
-def parseWord(word):
-    word = word.replace("*", "")
-
-    global conn
-    cursor = conn.cursor()  # обращение коннектору
-    cursor.execute('SELECT accent FROM accent_aot WHERE word_form="' + word + '"')
-    rows = cursor.fetchall()
-    uniq = set([row[0] for row in rows])
-    if len(uniq) == 0 or 255 in uniq:
-        print("[ERROR] Word \"{}\" is not in accents DB (or has no accent)".format(word))
-        return set(range(getSyllablesCount(word)))
-    return uniq
+def genLineMask(maskPattern, length):
+    count = math.ceil(length / len(maskPattern))
+    return (maskPattern * count)[:length]
 
 
-def getAccentSeqeunces(line):
-    """
-    Generates all possible sequences of accentuation for given line
-    :return: list of sequences (as lists of accents)
-    """
-    if len(line) == 1:
-        return [[i] for i in parseWord(line[0])]
-    else:
-        return product(getAccentSeqeunces([line[0]]), getAccentSeqeunces(line[1:]))
-
-
-def product(heads, tails):
-    """
-    Descartes product of two lists
-    :param heads: list of single-element lists
-    :param tails: list of lists
-    :return: list of products [heads[i] + tails[j] forall i,j]
-    """
-    products = []
-    for head in heads:
-        for tail in tails:
-            products.append(head + tail)
-    return products
-
-
-
+conn = mysql.connector.connect(host='localhost', database='accents', user='root', password='1234')
 main("poem.txt")
-# print(parseWord('чудное'))
